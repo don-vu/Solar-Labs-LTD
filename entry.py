@@ -26,29 +26,32 @@ print(f"Segmentation shape: {segmentation.shape}")
 print(f"Unique classes: {torch.unique(segmentation).tolist()}")
 
 
+
+
+
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm # Colormaps
 import numpy as np
 
-# 1. Get the actual number of classes from the model
-num_classes = len(model.config.id2label)
-print(f"This model supports {num_classes} classes.")
-
-# 2. Create a dynamic palette using a Matplotlib colormap (e.g., 'viridis' or 'tab20')
-# This automatically generates enough colors for every class the model knows
-cmap = cm.get_cmap('tab20', num_classes)
-palette = (cmap(np.arange(num_classes))[:, :3] * 255).astype(np.uint8)
-
-# 3. Convert tensor to numpy
+# Convert tensor to numpy
 seg_map = segmentation.cpu().numpy()
 
-# 4. Map the classes to colors
-# Now palette[7] will exist because the palette is size 'num_classes'
-color_seg = palette[seg_map]
+# Create binary mask for class 8 (Building)
+building_class_id = 7
+building_mask = (seg_map == building_class_id)
 
-# 5. Visualize
+# Convert original image to numpy
+image_np = np.array(image)
+
+# Create red overlay
+overlay = image_np.copy()
+overlay[building_mask] = [255, 0, 0]  # Red color
+
+print("Unique classes in segmentation:", torch.unique(segmentation))
+print(model.config.id2label)
+
+
 plt.figure(figsize=(10, 10))
-plt.imshow(color_seg)
-plt.title("Satellite Segmentation (All Classes)")
+plt.imshow(overlay)
+plt.title("Buildings Highlighted in Red")
 plt.axis("off")
 plt.show()
