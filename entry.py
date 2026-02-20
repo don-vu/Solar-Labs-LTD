@@ -8,7 +8,7 @@ processor = Mask2FormerImageProcessor.from_pretrained("mfaytin/mask2former-satel
 
 # Load and preprocess image
 Image.MAX_IMAGE_PIXELS = 100_000_000
-image = Image.open('/Users/donvu/Downloads/6.tif').convert("RGB")
+image = Image.open('/Users/boi/Desktop/2026projects/HackEDD/images/1.tif').convert("RGB")
 inputs = processor(images=image, return_tensors="pt")
 
 # Run inference
@@ -64,7 +64,7 @@ import geopandas as gpd
 building_class_id = 7
 mask = (seg_map == building_class_id).astype("uint8")
 
-with rasterio.open("/Users/donvu/Downloads/6.tif") as src:
+with rasterio.open("/Users/boi/Desktop/2026projects/HackEDD/images/1.tif") as src:
     transform = src.transform
     crs = src.crs
 
@@ -80,4 +80,4 @@ gdf = gpd.GeoDataFrame.from_features(geoms, crs=crs)
 gdf["building_id"] = range(len(gdf))
 gdf["area"] = gdf.geometry.area
 
-gdf.to_file("/Users/donvu/Downloads/buildings.geojson", driver="GeoJSON")
+gdf.to_file("/Users/boi/Desktop/2026projects/HackEDD/images/buildings.geojson", driver="GeoJSON")
