@@ -55,3 +55,29 @@ plt.imshow(overlay)
 plt.title("Buildings Highlighted in Red")
 plt.axis("off")
 plt.show()
+
+
+import rasterio
+from rasterio.features import shapes
+import geopandas as gpd
+
+building_class_id = 7
+mask = (seg_map == building_class_id).astype("uint8")
+
+with rasterio.open("/Users/donvu/Downloads/6.tif") as src:
+    transform = src.transform
+    crs = src.crs
+
+results = (
+    {"properties": {"value": v}, "geometry": s}
+    for s, v in shapes(mask, transform=transform)
+    if v == 1
+)
+
+geoms = list(results)
+
+gdf = gpd.GeoDataFrame.from_features(geoms, crs=crs)
+gdf["building_id"] = range(len(gdf))
+gdf["area"] = gdf.geometry.area
+
+gdf.to_file("/Users/donvu/Downloads/buildings.geojson", driver="GeoJSON")
