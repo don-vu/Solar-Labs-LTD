@@ -2,9 +2,9 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import geopandas as gpd
-from shapely.geometry import box  # NEW: Tool to draw our invisible screen boundary
+from shapely.geometry import box
 
-# 1. PAGE SETUP
+# Setup
 st.set_page_config(page_title="Solar Intelligence", layout="wide")
 
 st.markdown("""
@@ -17,28 +17,49 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data 
+@st.cache_data
 def load_data():
-    gdf = gpd.read_file("/Users/boi/Desktop/2026projects/HackEDD/images/6.geojson")
-    gdf = gdf.to_crs(epsg=4326)
-    
-    # 1. Base Energy & Money
+    gdf = gpd.read_parquet("data.parquet")
+
+    if gdf.crs is None:
+        gdf = gdf.set_crs(epsg=4326)
+    else:
+        gdf = gdf.to_crs(epsg=4326)
+
+
+    # Base Energy & Money
     gdf['solar_potential_kwh'] = gdf['area'] * 0.7 * 1100 * 0.2
     gdf['money_saved'] = gdf['solar_potential_kwh'] * 0.15
-    
-    # 2. NEW: Impact Metrics
-    # 0.5 kg of CO2 per kWh, divided by 1000 to get Metric Tonnes
-    gdf['co2_saved_tonnes'] = (gdf['solar_potential_kwh'] * 0.5) / 1000 
+
+    # Impact Metrics
+    gdf['co2_saved_tonnes'] = (gdf['solar_potential_kwh'] * 0.5) / 1000
     gdf['homes_powered'] = gdf['solar_potential_kwh'] / 7200
     gdf['evs_charged'] = gdf['solar_potential_kwh'] / 3000
+
+    gdf['geometry'] = gdf['geometry'].simplify(0.00001, preserve_topology=True)
+
+    gdf.sindex
+
+    gdf["tooltip_html"] = gdf.apply(
+    lambda row: f"""
+    <div style='font-family: sans-serif; padding: 10px; min-width: 150px;'>
+        <h4 style='margin-top: 0; color: #FF9F00;'>Building #{row.building_id}</h4>
+        <b>Roof Area:</b> {row.area:,.0f} m²<br>
+        <b>Energy Potential:</b> {row.solar_potential_kwh:,.0f} kWh/yr<br>
+        <b>Est. Savings:</b> <span style='color: green;'>${row.money_saved:,.0f}/yr</span>
+    </div>
+    """,
+    axis=1
+)
     
-    return gdf
+
+    center = gdf.geometry.centroid.iloc[0]
+    return gdf, center
 
 with st.spinner("Analyzing rooftop AI data..."):
-    gdf = load_data()
+    gdf, center = load_data()
 
-# 2. CREATE THE BASE MAP
-center = gdf.geometry.centroid.iloc[0]
+# Base maps
 m = folium.Map(
     location=[center.y, center.x],
     zoom_start=18,
@@ -48,44 +69,46 @@ m = folium.Map(
 )
 
 # Add all the orange buildings
-for _, row in gdf.iterrows():
-    tooltip_html = f"""
-    <div style='font-family: sans-serif; padding: 10px; min-width: 150px;'>
-        <h4 style='margin-top: 0; color: #FF9F00;'>Building #{row.building_id}</h4>
-        <b>Roof Area:</b> {row.area:,.0f} m²<br>
-        <b>Energy Potential:</b> {row.solar_potential_kwh:,.0f} kWh/yr<br>
-        <b>Est. Savings:</b> <span style='color: green;'>${row.money_saved:,.0f}/yr</span>
-    </div>
-    """
-    folium.GeoJson(
-        row.geometry,
-        tooltip=folium.Tooltip(tooltip_html),
-        style_function=lambda x: {
-            "fillColor": "#FFB300", 
-            "color": "#FF8F00",
-            "weight": 2,
-            "fillOpacity": 0.5,
-        },
-    ).add_to(m)
+folium.GeoJson(
+    gdf,
+    tooltip=folium.GeoJsonTooltip(
+        fields=["tooltip_html"],
+        aliases=[""],
+        labels=False,
+        sticky=True,
+        max_width=300,
+        style="""
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.15);
+            padding: 0px;
+        """
+    ),
+    style_function=lambda x: {
+        "fillColor": "#FFB300",
+        "color": "#FF8F00",
+        "weight": 2,
+        "fillOpacity": 0.5,
+    },
+).add_to(m)
 
-# 3. DISPLAY MAP & LISTEN FOR MOVEMENT
-# We added key="solar_map" so it remembers where you zoomed, and returned_objects=["bounds"] to track the screen edges
 map_data = st_folium(m, width="100%", height=900, key="solar_map", returned_objects=["bounds"])
 
-# 4. THE DYNAMIC MATH (Filter based on what is visible)
-visible_gdf = gdf # Default to all buildings
+# Filter visible buildings
+gdf = gdf.set_geometry("geometry")
 
 if map_data and map_data.get("bounds"):
-    # Grab the corners of your current screen
     bounds = map_data["bounds"]
     sw_lon, sw_lat = bounds["_southWest"]["lng"], bounds["_southWest"]["lat"]
     ne_lon, ne_lat = bounds["_northEast"]["lng"], bounds["_northEast"]["lat"]
-    
-    # Draw an invisible box using those corners
+
     screen_box = box(sw_lon, sw_lat, ne_lon, ne_lat)
-    
-    # Filter our data to ONLY include buildings inside that box
-    visible_gdf = gdf[gdf.geometry.intersects(screen_box)]
+
+    possible_matches_index = list(gdf.sindex.intersection(screen_box.bounds))
+    possible_matches = gdf.iloc[possible_matches_index]
+
+    visible_gdf = possible_matches[possible_matches.geometry.intersects(screen_box)]
 
 # Calculate totals for ONLY the visible buildings
 total_buildings = len(visible_gdf)
