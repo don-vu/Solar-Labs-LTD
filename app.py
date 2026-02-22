@@ -26,15 +26,14 @@ def load_data():
     else:
         gdf = gdf.to_crs(epsg=4326)
 
-
-    # Base Energy & Money
-    gdf['solar_potential_kwh'] = gdf['area'] * 0.7 * 1100 * 0.2
+    # Base Energy & Money (Updated to Edmonton's 1246 potential)
+    gdf['solar_potential_kwh'] = gdf['area'] * 0.7 * 1246 * 0.2
     gdf['money_saved'] = gdf['solar_potential_kwh'] * 0.15
 
     # Impact Metrics
-    gdf['co2_saved_tonnes'] = (gdf['solar_potential_kwh'] * 0.5) / 1000
+    gdf['co2_saved_tonnes'] = (gdf['solar_potential_kwh'] * 0.424) / 1000
     gdf['homes_powered'] = gdf['solar_potential_kwh'] / 7200
-    gdf['evs_charged'] = gdf['solar_potential_kwh'] / 3000
+    gdf['evs_charged'] = gdf['solar_potential_kwh'] / 3040
 
     gdf['geometry'] = gdf['geometry'].simplify(0.00001, preserve_topology=True)
 
@@ -52,7 +51,6 @@ def load_data():
     axis=1
 )
     
-
     center = gdf.geometry.centroid.iloc[0]
     return gdf, center
 
@@ -118,7 +116,6 @@ total_co2 = visible_gdf['co2_saved_tonnes'].sum()
 total_homes = visible_gdf['homes_powered'].sum()
 total_evs = visible_gdf['evs_charged'].sum()
 
-# --- THE CRAP-OPTIMIZED LEGEND ---
 # --- THE FINAL POLISHED LEGEND ---
 st.markdown(f'''
      <div style="
